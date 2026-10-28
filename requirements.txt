@@ -1,2 +1,5 @@
 dhanhq
 flask
+dhanhq
+Flask
+python-telegram-bot
