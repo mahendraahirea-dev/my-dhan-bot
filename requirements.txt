@@ -1,7 +1,7 @@
-
-python-telegram-bot==20.7
-dhanhq
-openpyxl
-pytz
 fastapi
 uvicorn
+dhanhq
+python-telegram-bot==20.8
+pandas
+openpyxl
+httpx
