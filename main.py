@@ -23,21 +23,16 @@ def get_dhan():
         from dhanhq import dhanhq
         if not DHAN_ID or not DHAN_TOKEN: return None
         return dhanhq(DHAN_ID, DHAN_TOKEN)
-    except Exception as e:
-        print(f"Dhan init err {e}")
-        return None
+    except: return None
 
 def send_all(text):
     for cid in list(CHAT_IDS):
-        try:
-            requests.post(f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage", json={"chat_id": cid, "text": text}, timeout=10)
+        try: requests.post(f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage", json={"chat_id": cid, "text": text}, timeout=10)
         except: pass
 
 def send_one(cid, text):
-    try:
-        requests.post(f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage", json={"chat_id": cid, "text": text}, timeout=15)
-    except Exception as e:
-        print(f"send err {e}")
+    try: requests.post(f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage", json={"chat_id": cid, "text": text}, timeout=15)
+    except: pass
 
 def get_spot_price(underlying):
     try:
@@ -55,9 +50,7 @@ def get_spot_price(underlying):
             return float(r['data']['NSE_EQ'][str(sid)]['last_price'])
         except: pass
         return 0
-    except Exception as e:
-        print(f"spot err {underlying} {e}")
-        return 0
+    except: return 0
 
 def get_option_ltp(underlying, strike, opt_type):
     try:
@@ -78,8 +71,7 @@ def get_option_ltp(underlying, strike, opt_type):
                     return ltp, sym, expiry
             except: continue
         return 0, None, None
-    except:
-        return 0, None, None
+    except: return 0, None, None
 
 def get_atm(spot, underlying):
     try:
@@ -89,29 +81,115 @@ def get_atm(spot, underlying):
     except: return int(spot)
 
 def paper_multi_loop():
-    print("📝 V33.1 MULTI PAPER STARTED - NIFTY BANK SENSEX REL HDFC - NO PYTZ - NO CRASH")
+    print("📝 V33.1 MULTI PAPER STARTED")
     while True:
         try:
             now = datetime.now(IST)
             cur_time = now.time()
             if cur_time < dtime(9,15) or cur_time > dtime(15,20):
-                time.sleep(60)
-                continue
+                time.sleep(60); continue
             if not AUTO_TRADING:
-                time.sleep(15)
-                continue
+                time.sleep(15); continue
             for underlying in SYMBOLS:
                 try:
                     spot = get_spot_price(underlying)
-                    if spot==0:
-                        time.sleep(1)
-                        continue
+                    if spot==0: time.sleep(1); continue
                     atm = get_atm(spot, underlying)
                     if underlying not in CURRENT_POSITIONS:
                         for opt_type in ["PE","CE"]:
-                            try:
-                                ltp, sym, exp = get_option_ltp(underlying, atm, opt_type)
-                                if 10 < ltp < 350 and sym:
-                                    qty = 75 if underlying=="NIFTY" else 30 if underlying=="BANKNIFTY" else 20 if underlying=="SENSEX" else 250 if underlying=="RELIANCE" else 300
-                                    sl = max(5, ltp - (2000/qty))
-                                    pos = {"underlying":underlying,"symbol":sym,"buy_price":ltp,"buy_time":now.strftime('%Y-%m-%d %H:%M:%S'),"buy_spot":spot,"qty":qty,"highest":ltp,"sl_price":sl,"strike":atm,"type
+                            ltp, sym, exp = get_option_ltp(underlying, atm, opt_type)
+                            if 10 < ltp < 350 and sym:
+                                qty = 75 if underlying=="NIFTY" else 30 if underlying=="BANKNIFTY" else 20 if underlying=="SENSEX" else 250
+                                sl = max(5, ltp - (2000/qty))
+                                pos = {"underlying":underlying,"symbol":sym,"buy_price":ltp,"buy_time":now.strftime('%Y-%m-%d %H:%M:%S'),"buy_spot":spot,"qty":qty,"highest":ltp,"sl_price":sl,"strike":atm,"type":opt_type,"expiry":exp}
+                                CURRENT_POSITIONS[underlying]=pos
+                                send_all(f"📝 PAPER BUY {underlying}\n⏰ {pos['buy_time']}\n📈 {sym}\n💰 {ltp:.1f} Spot {spot:.1f}\nQty {qty} SL {sl:.1f}\n⚠️ PAPER ONLY")
+                                TODAY_TRADES.append({"date":now.strftime('%Y-%m-%d'),"underlying":underlying,"action":"BUY","time":pos['buy_time'],"symbol":sym,"premium":ltp,"qty":qty})
+                                break
+                    else:
+                        pos = CURRENT_POSITIONS[underlying]
+                        curr_ltp,_,_ = get_option_ltp(pos['underlying'], pos['strike'], pos['type'])
+                        if curr_ltp==0: continue
+                        if curr_ltp > pos['highest']:
+                            pos['highest']=curr_ltp
+                            new_sl = pos['highest'] - (2000/pos['qty'])
+                            if new_sl > pos['sl_price']: pos['sl_price']=new_sl
+                            CURRENT_POSITIONS[underlying]=pos
+                        pnl=(curr_ltp-pos['buy_price'])*pos['qty']
+                        should=False; reason=""
+                        if curr_ltp <= pos['sl_price']: should=True; reason=f"SL {curr_ltp:.1f}"
+                        elif cur_time >= dtime(15,15): should=True; reason="TIME 15:15"
+                        elif pnl >= 5000: should=True; reason=f"TARGET {pnl:.0f}"
+                        elif pnl <= -2000: should=True; reason=f"LOSS {pnl:.0f}"
+                        if should:
+                            et=now.strftime('%Y-%m-%d %H:%M:%S')
+                            send_all(f"📕 PAPER EXIT {underlying}\n{pos['buy_time'][11:]} -> {et[11:]}\n{pos['symbol']}\nBuy {pos['buy_price']:.1f} -> {curr_ltp:.1f}\nP&L {pnl:.0f} {reason}")
+                            TODAY_TRADES.append({"date":now.strftime('%Y-%m-%d'),"underlying":underlying,"action":"SELL","entry_time":pos['buy_time'],"exit_time":et,"symbol":pos['symbol'],"buy":pos['buy_price'],"sell":curr_ltp,"pnl":pnl,"reason":reason})
+                            del CURRENT_POSITIONS[underlying]
+                    time.sleep(1.5)
+                except: time.sleep(1); continue
+            time.sleep(8)
+        except: time.sleep(10); continue
+
+def tg_loop():
+    print("✅ Telegram V33.1 STARTING...")
+    try: requests.get(f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/deleteWebhook?drop_pending_updates=true", timeout=10)
+    except: pass
+    offset=0
+    print("✅ POLLING STARTED")
+    while True:
+        try:
+            r = requests.get(f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/getUpdates", params={"offset":offset,"timeout":25}, timeout=35).json()
+            if not r.get("ok"): time.sleep(3); continue
+            for upd in r.get("result",[]):
+                try:
+                    offset = upd["update_id"]+1
+                    msg = upd.get("message",{})
+                    cid = msg.get("chat",{}).get("id")
+                    txt = (msg.get("text","") or "").strip()
+                    if not cid: continue
+                    CHAT_IDS.add(cid)
+                    if txt.startswith("/start"):
+                        send_one(cid,"📝 V33.1 MULTI PAPER LIVE!\n✅ NO REAL MONEY\n✅ 100% AUTO\nSymbols: NIFTY BANK SENSEX REL HDFC\n/today /pos /status /auto_on /auto_off")
+                    elif txt.startswith("/today"):
+                        today_str = datetime.now(IST).strftime('%Y-%m-%d')
+                        today_list = [t for t in TODAY_TRADES if today_str in str(t)]
+                        total = sum([t.get('pnl',0) for t in today_list if t.get('action')=='SELL'])
+                        if not today_list: send_one(cid,f"📅 {today_str}\nAaj trade nahi\nP&L {total:.0f} PAPER")
+                        else:
+                            lines=[]
+                            for t in today_list[-30:]:
+                                if t['action']=='BUY': lines.append(f"BUY {t['underlying']} @ {t.get('premium',0):.1f}")
+                                else: lines.append(f"SELL {t['underlying']} P&L {t.get('pnl',0):.0f}")
+                            send_one(cid,f"📅 AAJ {today_str} P&L {total:.0f} PAPER\n"+"\n".join(lines))
+                    elif txt.startswith("/pos"):
+                        if not CURRENT_POSITIONS: send_one(cid,"No Open Position")
+                        else:
+                            out="📊 OPEN:\n"
+                            for k,v in CURRENT_POSITIONS.items():
+                                curr,_,_=get_option_ltp(v['underlying'], v['strike'], v['type'])
+                                pnl=(curr-v['buy_price'])*v['qty'] if curr else 0
+                                out+=f"{k} {v['symbol']} Buy {v['buy_price']:.1f} Now {curr:.1f} P&L {pnl:.0f}\n"
+                            send_one(cid,out)
+                    elif txt.startswith("/status"):
+                        total=sum([t.get('pnl',0) for t in TODAY_TRADES if t.get('action')=='SELL'])
+                        send_one(cid,f"🤖 V33.1 STATUS\nAUTO:{AUTO_TRADING}\nPOS:{list(CURRENT_POSITIONS.keys())}\nP&L:{total:.0f}\nTime:{datetime.now(IST).strftime('%H:%M:%S')}")
+                    elif txt.startswith("/auto_on"):
+                        globals()['AUTO_TRADING']=True
+                        send_one(cid,"✅ AUTO ON")
+                    elif txt.startswith("/auto_off"):
+                        globals()['AUTO_TRADING']=False
+                        send_one(cid,"⏸️ AUTO OFF")
+                except: continue
+        except: time.sleep(5); continue
+
+@app.get("/")
+def root():
+    try:
+        total=sum([t.get('pnl',0) for t in TODAY_TRADES if t.get('action')=='SELL'])
+        return {"status":"V33.1 LIVE","auto":AUTO_TRADING,"pos":list(CURRENT_POSITIONS.keys()),"pnl":total}
+    except: return {"status":"alive"}
+
+threading.Thread(target=tg_loop, daemon=True).start()
+threading.Thread(target=paper_multi_loop, daemon=True).start()
+print("🔥 V33.1 THREADS STARTED")
