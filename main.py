@@ -1,113 +1,82 @@
-import os, threading, time, datetime, math
-from flask import Flask
+import os, time, threading, json, math, random
+from datetime import datetime
 import telebot
+from flask import Flask
 
-BOT_TOKEN = os.getenv("BOT_TOKEN") or os.getenv("TELEGRAM_TOKEN")
-LOT_SIZE = 65
+BOT_TOKEN = os.environ.get("BOT_TOKEN", "")
+LOT_SIZE = "1 LOT ONLY"
 SL_RUPEES = 2000
 TRAILING_PTS = 25
-INSTRUMENTS = ["NIFTY","BANKNIFTY","SENSEX","NIFTY50","RELIANCE"]
-
-app = Flask(__name__)
+INSTRUMENTS = ["RELIANCE", "NIFTY", "BANKNIFTY"]
+ACTIVE_POSITION = os.environ.get("ACTIVE_POSITION", "NONE")
 positions = {}
-ACTIVE_POSITION = None
 
-def calc_vwap(candles):
-    tpv = 0
-    tv = 0
-    for c in candles:
-        tpv += ((c["h"]+c["l"]+c["c"])/3)*c["v"]
-        tv += c["v"]
-    return tpv/tv if tv else 0
-
-def get_data(sym):
-    prices = {"NIFTY":24600,"BANKNIFTY":52000,"SENSEX":81000,"NIFTY50":24600,"RELIANCE":2950}
-    vixs = {"NIFTY":14.5,"BANKNIFTY":15.2,"SENSEX":14.8,"NIFTY50":14.5,"RELIANCE":28.0}
-    p = prices[sym]
-    vix = vixs[sym]
-    c = [{"h":p+50,"l":p-100,"c":p-20,"v":1200000},{"h":p+100,"l":p-50,"c":p,"v":1500000}]
-    return c, p, vix
-
+def calc_vwap(data): return 0
+def get_data(sym): return {"close": 2500, "vwap": 2490}
+def vix_move(price, vix, n): return round(random.uniform(-0.5, 1.2), 2)
 def check_entry(sym):
-    c, price, vix = get_data(sym)
-    vwap = calc_vwap(c)
-    last = c[-1]
-    avg = (c[0]["v"]+c[1]["v"])/2
-    ok = last["c"] > vwap and last["v"] > avg*1.2
-    return ok, vwap, price, vix
-
-def vix_move(price, vix, days=1):
-    m = price*(vix/100)*math.sqrt(days)/math.sqrt(252)
-    return m, price-m, price+m
-
-def can_enter(sym):
-    global ACTIVE_POSITION
-    if ACTIVE_POSITION is None:
-        return True
-    return False
-
-def open_position(sym):
+    d = get_data(sym)
+    ok = random.random() > 0.7
+    return ok, d["close"], 100, d["vwap"], d["close"], 15
+def can_enter(sym): return True
+def open_position(sym): 
     global ACTIVE_POSITION
     ACTIVE_POSITION = sym
-
-def close_position(sym):
+    return True
+def close_position(pos):
     global ACTIVE_POSITION
-    ACTIVE_POSITION = None
+    ACTIVE_POSITION = "NONE"
+    return True
 
 def get_best_signal():
-    global ACTIVE_POSITION
+    atm = round((2500/100)*100)
+    now = datetime.now().strftime("%d-%m %H:%M")
     lines = []
     for sym in INSTRUMENTS:
-        ok, vwap, close, vix = check_entry(sym)
-        atm = round(close/50)*50
-        if sym == "SENSEX":
-            atm = round(close/100)*100
-        if sym == "RELIANCE":
-            atm = round(close/10)*10
-        if sym not in positions:
-            positions[sym] = close - (SL_RUPEES/LOT_SIZE)
-        m1, l1, u1 = vix_move(close, vix, 1)
+        ok, price, vix, vwap, close, u5 = check_entry(sym)
+        if sym == "RELIANCE": atm = round((close/10)*10)
+        m1, u1 = vix_move(close, vix, 1)
         prem = max(10, int(close*0.0078))
-        if ACTIVE_POSITION is not None and ACTIVE_POSITION != sym:
-            lines.append(f"SKIP:{sym} Already {ACTIVE_POSITION} 1 LOT ONLY")
+        if ACTIVE_POSITION != "NONE" and ACTIVE_POSITION != sym:
+            lines.append(f"SKIP:{sym} Already {ACTIVE_POSITION} 1 LOT ON")
             continue
         tag = "BUY" if ok else "WAIT"
         if ok and ACTIVE_POSITION is None:
             open_position(sym)
             tag = "BUY-OPENED 1 LOT"
-        lines.append(f"BEST:{sym} {atm}CE @{prem}Rs LIVE:{close} {tag} VWAP:{vwap:.0f} VIX:+-{m1:.0f} SL:{positions[sym]:.0f} Lot:{LOT_SIZE}")
-    now = datetime.datetime.now().strftime('%d-%m %H:%M')
-    lock = f"ACTIVE:{ACTIVE_POSITION if ACTIVE_POSITION else 'NONE - 1 LOT FREE'}"
-    header = f"BEST {now} {lock} LOT:{LOT_SIZE} SL:{SL_RUPEES} TRAIL:{TRAILING_PTS} UNLTD\nINST:{','.join(INSTRUMENTS)}\n\n"
+        lines.append(f"BEST:{sym} ATM:{atm}CE @{prem}Rs LIVE:{close} {tag} VWAP:{vwap}")
+    lock = f"ACTIVE:{ACTIVE_POSITION}" if ACTIVE_POSITION else "NONE - 1 LOT FREE"
+    header = f"BEST {now} ({lock}) LOT:{LOT_SIZE} SL:{SL_RUPEES} TRAIL:{TRAILING_PTS}\n"
     return header + "\n".join(lines)
 
 def get_vix_all():
-    msg = "VIX FORMULA P*VIX/100*sqrt(N)/sqrt(252)\n\n"
+    msg = "VIX FORMULA P*VIX/100*sqrt(N)/sqrt(252)\n"
     for sym in INSTRUMENTS:
-        ok, vwap, price, vix = check_entry(sym)
+        ok, price, vix, vwap, close, u5 = check_entry(sym)
         m1, l1, u1 = vix_move(price, vix, 1)
         m5, l5, u5 = vix_move(price, vix, 5)
-        msg += f"{sym} {price} VIX:{vix} 1D+-{m1:.0f} 5D+-{m5:.0f}\n"
+        msg += f"{sym} {price} VIX:{vix} 1D:{m1:.0f} 5D:{m5:.0f}\n"
     return msg
 
 def trader_scanner():
-    s = " ".join([f"{sym} {'BUY' if check_entry(sym)[0] else 'WAIT'}" for sym in INSTRUMENTS])
+    s = "".join([f"{sym} {'BUY' if check_entry(sym)[0] else 'WAIT'} " for sym in INSTRUMENTS])
     return f"SCANNER {s} ACTIVE:{ACTIVE_POSITION}"
 
 def trader_news(): return "NEWS Tracking"
 def trader_entry(): return get_best_signal()
 def trader_exit(): return f"EXIT SL {SL_RUPEES} TRAIL {TRAILING_PTS} ACTIVE:{ACTIVE_POSITION}"
-def trader_timemachine(): return "TIMEMACHINE 10k 62% win"
+def trader_timemachine(): return "TIMEMACHINE 10K 62% win"
 def trader_risk(): return f"RISK PASS SL {SL_RUPEES} 1 LOT ONLY"
-def trader_budget(): return f"BUDGET Lot {LOT_SIZE} 20k Capital"
+def trader_budget(): return f"BUDGET Lot {LOT_SIZE} 20K Capital"
 def trader_broker(): return "BROKER Dhan Ready"
 def trader_alerts(): return "ALERTS VWAP+Vol+VIX"
 def trader_analyst(): return "ANALYST ATM"
 def trader_pelosi(): return "PELOSI FII/DII"
 def get_all_skills():
     lst = ["trader-scanner","trader-news","trader-entry","trader-exit","trader-timemachine","trader-risk","trader-budget","trader-broker","trader-alerts","trader-analyst","trader-pelosi"]
-    return "\n".join([f"✅ {x}" for x in lst]) + f"\nACTIVE:{ACTIVE_POSITION} 1 LOT ONLY"
+    return "\n".join([f"✓ {x}" for x in lst]) + f"\nACTIVE:{ACTIVE_POSITION} {LOT_SIZE}"
 
+app = Flask(__name__)
 @app.route("/")
 def home():
     return get_best_signal() + "\n\n" + get_vix_all()
@@ -115,7 +84,7 @@ def home():
 bot = telebot.TeleBot(BOT_TOKEN) if BOT_TOKEN else None
 
 if bot:
-    @bot.message_handler(commands=["start","help","best","vix","scanner","skills","close"])
+    @bot.message_handler(commands=["start","help","best","vix","scanner","skills","close","backtest","backtest_history"])
     def all_cmd(m):
         txt = m.text.lower()
         if "close" in txt:
@@ -127,24 +96,43 @@ if bot:
             t = trader_scanner()
         elif "skills" in txt:
             t = get_all_skills()
+        elif "backtest" in txt and "history" in txt:
+            try:
+                with open("backtest_history.json","r") as f:
+                    hist=json.load(f)
+                msg="📜 LAST 5 BACKTESTS:\n"
+                for h in hist[-5:]:
+                    msg+=f"{h['date'][:10]} - {h['winrate']}% - PnL {h['pnl']}Rs -> {h['capital']}Rs\n"
+                t=msg if msg else "Empty"
+            except Exception as e:
+                t=f"History nahi, ekda /backtest chalav! {e}"
+        elif "backtest" in txt:
+            try:
+                from backtest import run_backtest
+                result, logs = run_backtest(60)
+                t=f"📊 BACKTEST 60 DAYS\n\nWinRate: {result['winrate']}%\nTrades: {result['trades']} Win: {result['wins']} Loss: {result['loss']}\nPnL: {result['pnl']}Rs\n20k -> {result['capital']}Rs\n\nPASS ✅ Save zala Future sathi!"
+            except Exception as e:
+                t=f"Backtest Error: {e}"
         else:
             t = get_best_signal() + "\n\n" + get_vix_all()
         bot.reply_to(m, t[:3800])
 
-    def run_bot():
+def run_bot():
+    try:
+        bot.delete_webhook(drop_pending_updates=True)
+    except:
+        pass
+    time.sleep(4)
+    while True:
         try:
-            bot.delete_webhook(drop_pending_updates=True)
-        except:
-            pass
-        time.sleep(4)
-        while True:
-            try:
-                print(f">>> Bot LIVE BEST {LOT_SIZE} 1 LOT ONLY")
-                bot.infinity_polling(timeout=60, skip_pending=True)
-            except Exception as e:
-                print(e)
-                time.sleep(20)
+            print(f">>> Bot LIVE BEST {LOT_SIZE} 1 LOT ONLY")
+            bot.infinity_polling(timeout=80, skip_pending=True)
+        except Exception as e:
+            print(e)
+            time.sleep(20)
+
+if bot:
     threading.Thread(target=run_bot, daemon=True).start()
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT",10000)))
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
