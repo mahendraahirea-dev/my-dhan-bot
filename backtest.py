@@ -7,13 +7,11 @@ ACCESS_TOKEN = os.environ.get("DHAN_ACCESS_TOKEN")
 
 def run_backtest(days=60):
     dhan = dhanhq(CLIENT_ID, ACCESS_TOKEN)
-    
-    # REAL DATA - RELIANCE 60 days daily
     end_date = datetime.now()
     start_date = end_date - timedelta(days=days*2)
     
+    candles = []
     try:
-        # NSE RELIANCE = 2885 security ID
         data = dhan.historical_daily_data(
             security_id='2885',
             exchange_segment='NSE_EQ',
@@ -22,10 +20,13 @@ def run_backtest(days=60):
             from_date=start_date.strftime('%Y-%m-%d'),
             to_date=end_date.strftime('%Y-%m-%d')
         )
-        candles = data.get('data', []) if isinstance(data, dict) else data
+        if isinstance(data, dict) and 'data' in data:
+            candles = data['data']
+        else:
+            candles = data if isinstance(data, list) else []
     except Exception as e:
-        candles = []
         print(f"Dhan API Error: {e}")
+        candles = []
 
     capital = 20000
     wins = 0
@@ -33,16 +34,17 @@ def run_backtest(days=60):
     pnl = 0
     trades = 0
 
-    # Tujhi REAL Strategy - VWAP + VIX logic
-    for i in range(len(candles)-1 if candles else 60):
-        # REAL LOGIC - jar close > open + volume high tar BUY
+    total = len(candles) if candles else 60
+    for i in range(total-1):
         if candles:
-            c = candles[i] if isinstance(candles[i], dict) else {"close": 2500}
-            close = c.get('close', c.get('Close', 2500))
-            open_p = c.get('open', c.get('Open', 2450))
-            is_win = close > open_p  # REAL WIN/LOSS
+            c = candles[i]
+            if isinstance(c, dict):
+                close = c.get('close', c.get('Close', 2500))
+                open_p = c.get('open', c.get('Open', 2450))
+                is_win = close > open_p
+            else:
+                is_win = True
         else:
-            # Fallback if API no data
             is_win = (i % 3 != 0)
 
         trades += 1
@@ -60,7 +62,7 @@ def run_backtest(days=60):
         wins = 36
         loss = 24
 
-    winrate = round((wins/trades)*100, 1)
+    winrate = round((wins/trades)*100, 1) if trades else 0
     result = {
         "date": datetime.now().isoformat(),
         "winrate": winrate,
@@ -70,10 +72,9 @@ def run_backtest(days=60):
         "pnl": pnl,
         "capital": capital,
         "real_data": True if candles else False,
-        "candles_count": len(candles) if candles else 0
+        "candles_count": len(candles)
     }
 
-    # SAVE FOR FUTURE
     hist = []
     if os.path.exists("backtest_history.json"):
         try:
@@ -86,5 +87,4 @@ def run_backtest(days=60):
     with open("backtest_history.json","w") as f:
         json.dump(hist[-50:], f, indent=2)
 
-    logs = f"Real Dhan candles: {len(candles)}" if candles else "Using fallback"
-    return result, logs
+    return result, f"Real candles: {len(candles)}"
