@@ -108,3 +108,39 @@ threading.Thread(target=main_loop, daemon=True).start()
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
+    # =================================================
+# FINAL - 1.2 LAKH MAX PROFIT - ONE TRADE
+# =================================================
+MAX_PROFIT = 120000  # 1 Lakh 20K
+TRAIL_PTS = 15
+SL_PTS = 30  # 2K SL = 30pts x 65 lot
+
+LOTS_FINAL = {
+    "NIFTY": 65,       # 65 x 1800pts = 1.2L
+    "BANKNIFTY": 30,   # 30 x 4000pts = 1.2L
+    "SENSEX": 20,      # 20 x 6000pts = 1.2L
+    "RELIANCE": 1     # 1 x 1.2L = 1.2L
+}
+
+def check_1_2lakh_exit(entry, current, symbol):
+    lot = LOTS_FINAL[symbol]
+    profit_pts = current - entry
+    profit_rs = profit_pts * lot
+    
+    # 1.2 Lakh lock
+    if profit_rs >= MAX_PROFIT:
+        return True, f"💰💰 1.2 LAKH LOCK HIT! {symbol} {profit_pts}pts x {lot} lot = {profit_rs}rs"
+    
+    # 15 pts trail - 96->1270 move full pakdayla
+    global highest_price
+    if profit_pts >= TRAIL_PTS:
+        if current > highest_price:
+            highest_price = current
+        if current <= highest_price - TRAIL_PTS:
+            return True, f"🔒 TRAIL 15pts EXIT: {profit_pts}pts = {profit_rs}rs | High {highest_price}"
+    
+    # 2K SL
+    if profit_pts <= -SL_PTS:
+        return True, f"🛑 SL HIT 2K: {profit_pts}pts"
+    
+    return False, ""
