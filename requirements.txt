@@ -1,11 +1,5 @@
 fastapi
 uvicorn
-pyTelegramBotAPI
-requests
-python-dotenv
-pytz
-pyotp
-flask
-dhanhq
-yfinance
-pandas
+python-telegram-bot==20.7
+dhanhq==2.0.2
+httpx
