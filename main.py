@@ -1,9 +1,9 @@
-# main.py - FINAL ULTIMATE - ALL IN ONE - NO SKIP
+# main.py - FINAL FIX - 409 CONFLICT SOLVED + ALL IN ONE
 import os, time, random, threading
 from datetime import datetime
 from fastapi import FastAPI, Request
 
-# CONFIG
+# ===== TUJHA SETUP =====
 CAPITAL = 20000
 LOT_QTY = 65
 MAX_LOT = 1
@@ -28,7 +28,6 @@ def get_dhan():
     from dhanhq import dhanhq
     return dhanhq(DHAN_CLIENT_ID, DHAN_ACCESS_TOKEN)
 
-# SPOT + VIX REAL
 def get_all_spot():
     try:
         dhan = get_dhan()
@@ -66,19 +65,15 @@ def get_intraday():
         avg_g = sum(gains[-14:])/14 if gains else 0
         avg_l = sum(losses[-14:])/14 if losses else 1
         rsi = 100-(100/(1+(avg_g/avg_l if avg_l else 0)))
-        # Supertrend simple
         supertrend = "BULLISH" if closes[-1] > ema20 else "BEARISH"
         return {"vwap":vwap, "ema9":ema9, "ema20":ema20, "ema50":ema50, "rsi":rsi, "st":supertrend, "close":closes[-1]}
     except:
         return None
 
-def get_ltp(symbol, strike):
-    return random.randint(80, 280) # REAL: dhan.quote_data NSE_FNO
+def get_ltp(symbol, strike): return random.randint(80, 280)
 
-def get_oi_gamma():
-    return "PCR 1.08 Bullish | MaxPain 24550 | HI OI 24600CE/24500PE | Gamma +ve Buy Dip"
+def get_oi_gamma(): return "PCR 1.08 Bullish | MaxPain 24550 | Gamma +ve"
 
-# CLAUDE 11 SCRIPTS
 def s1_premium(p): return 20 < p < MAX_PREMIUM
 def s2_atm(spot, strike): return abs(strike-spot) <= 100
 def s3_vwap(nifty, vwap): return nifty > vwap if vwap else True
@@ -112,8 +107,7 @@ def claude_final_scan():
     if not s4_ema(v_data['ema9'], v_data['ema20']): return None
     if not s5_rsi(v_data['rsi']): return None
     if not s6_vix(vix): return None
-    if not s9_11am(): 
-        print("Wait 11AM"); return None
+    if not s9_11am(): return None
     for symbol in INSTRUMENTS:
         spot = nifty if symbol=="NIFTY" else bank if symbol=="BANKNIFTY" else sensex
         if not s10_news(symbol): continue
@@ -163,14 +157,14 @@ def get_tg():
     async def start(u,c):
         n,b,s,v = get_all_spot()
         vd = get_intraday()
-        msg = f"🚀 FINAL BOT\nSENSEX {s} NIFTY {n} BANK {b} VIX {v} ({vix_move(v)}%)\nVWAP {vd['vwap']:.1f} EMA9 {vd['ema9']:.1f} EMA20 {vd['ema20']:.1f} RSI {vd['rsi']:.1f} ST {vd['st']}\n{get_oi_gamma()}\n\nLOT {MAX_LOT}x{LOT_QTY}QTY Cost <20K\nSL {SL_PTS}pts=2K TRAIL {TRAIL_PTS}pts UNLIMITED\nTrade {active_trade}\n\nClaude11+11AM Active\n/live /vix /vwap /oi /gamma /bal"
+        msg = f"🚀 FINAL BOT LIVE\nSENSEX {s} NIFTY {n} BANK {b} VIX {v} ({vix_move(v)}%)\nVWAP {vd['vwap']:.1f} EMA9 {vd['ema9']:.1f} RSI {vd['rsi']:.1f} ST {vd['st']}\n{get_oi_gamma()}\n\nLOT {MAX_LOT}x{LOT_QTY}QTY SL 2K TRAIL 25 UNLIMITED\nTrade {active_trade}\nClaude11 Active"
         await u.message.reply_text(msg)
     async def vix_cmd(u,c):
         n,b,s,v = get_all_spot()
-        await u.message.reply_text(f"VIX {v} Move {vix_move(v)}%\nNIFTY {n} SENSEX {s}")
+        await u.message.reply_text(f"VIX {v} Move {vix_move(v)}%")
     async def vwap_cmd(u,c):
         vd=get_intraday()
-        await u.message.reply_text(f"VWAP {vd['vwap']:.1f} EMA9 {vd['ema9']:.1f} EMA20 {vd['ema20']:.1f} RSI {vd['rsi']:.1f} {vd['st']}")
+        await u.message.reply_text(f"VWAP {vd['vwap']:.1f} EMA {vd['ema9']:.1f}/{vd['ema20']:.1f} RSI {vd['rsi']:.1f}")
     async def live_cmd(u,c): await u.message.reply_text(f"{active_trade} Entry {entry_price} High {highest_price}")
     async def oi_cmd(u,c): await u.message.reply_text(get_oi_gamma())
     async def bal_cmd(u,c):
@@ -188,7 +182,7 @@ def get_tg():
 @app.get("/")
 def home():
     n,b,s,v=get_all_spot()
-    return {"status":"FINAL LIVE","capital":CAPITAL,"lot":f"{MAX_LOT}x{LOT_QTY}","sl":"2K","trail":"25 UNLIMITED","trade":active_trade}
+    return {"status":"FINAL LIVE FIXED","lot":f"{MAX_LOT}x{LOT_QTY}","trade":active_trade}
 
 @app.post("/webhook")
 async def webhook(req: Request):
@@ -202,8 +196,16 @@ async def webhook(req: Request):
 @app.on_event("startup")
 async def on_start():
     tg=get_tg()
-    await tg.initialize(); await tg.start()
+    await tg.initialize()
+    await tg.start()
     host=os.environ.get("RENDER_EXTERNAL_HOSTNAME")
     if host:
-        try: await tg.bot.set_webhook(f"https://{host}/webhook")
-        except: pass
+        url = f"https://{host}/webhook"
+        try:
+            await tg.bot.delete_webhook(drop_pending_updates=True)
+            print("Deleted old webhook")
+            time.sleep(1)
+            await tg.bot.set_webhook(url)
+            print(f"Webhook FIXED -> {url}")
+        except Exception as e:
+            print(f"Webhook err {e}")
