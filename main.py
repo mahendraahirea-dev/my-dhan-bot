@@ -10,6 +10,7 @@ INSTRUMENTS = ["NIFTY","BANKNIFTY","SENSEX","NIFTY50","RELIANCE"]
 
 app = Flask(__name__)
 positions = {}
+ACTIVE_POSITION = None
 
 def calc_vwap(candles):
     tpv = 0
@@ -20,26 +21,11 @@ def calc_vwap(candles):
     return tpv/tv if tv else 0
 
 def get_data(sym):
-    prices = {
-        "NIFTY": 24600,
-        "BANKNIFTY": 52000,
-        "SENSEX": 81000,
-        "NIFTY50": 24600,
-        "RELIANCE": 2950
-    }
-    vixs = {
-        "NIFTY": 14.5,
-        "BANKNIFTY": 15.2,
-        "SENSEX": 14.8,
-        "NIFTY50": 14.5,
-        "RELIANCE": 28.0
-    }
+    prices = {"NIFTY":24600,"BANKNIFTY":52000,"SENSEX":81000,"NIFTY50":24600,"RELIANCE":2950}
+    vixs = {"NIFTY":14.5,"BANKNIFTY":15.2,"SENSEX":14.8,"NIFTY50":14.5,"RELIANCE":28.0}
     p = prices[sym]
     vix = vixs[sym]
-    c = [
-        {"h": p+50, "l": p-100, "c": p-20, "v": 1200000},
-        {"h": p+100, "l": p-50, "c": p, "v": 1500000}
-    ]
+    c = [{"h":p+50,"l":p-100,"c":p-20,"v":1200000},{"h":p+100,"l":p-50,"c":p,"v":1500000}]
     return c, p, vix
 
 def check_entry(sym):
@@ -54,7 +40,22 @@ def vix_move(price, vix, days=1):
     m = price*(vix/100)*math.sqrt(days)/math.sqrt(252)
     return m, price-m, price+m
 
+def can_enter(sym):
+    global ACTIVE_POSITION
+    if ACTIVE_POSITION is None:
+        return True
+    return False
+
+def open_position(sym):
+    global ACTIVE_POSITION
+    ACTIVE_POSITION = sym
+
+def close_position(sym):
+    global ACTIVE_POSITION
+    ACTIVE_POSITION = None
+
 def get_best_signal():
+    global ACTIVE_POSITION
     lines = []
     for sym in INSTRUMENTS:
         ok, vwap, close, vix = check_entry(sym)
@@ -67,15 +68,17 @@ def get_best_signal():
             positions[sym] = close - (SL_RUPEES/LOT_SIZE)
         m1, l1, u1 = vix_move(close, vix, 1)
         prem = max(10, int(close*0.0078))
+        if ACTIVE_POSITION is not None and ACTIVE_POSITION != sym:
+            lines.append(f"SKIP:{sym} Already {ACTIVE_POSITION} 1 LOT ONLY")
+            continue
         tag = "BUY" if ok else "WAIT"
-        line1 = f"BEST:{sym} {atm}CE @{prem}Rs"
-        line2 = f"LIVE:{close} {tag} VWAP:{vwap:.0f}"
-        line3 = f"VIX:+-{m1:.0f} [{l1:.0f}-{u1:.0f}]"
-        line4 = f"SL:{positions[sym]:.0f} Lot:{LOT_SIZE}"
-        lines.append(f"{line1} {line2} {line3} {line4}")
+        if ok and ACTIVE_POSITION is None:
+            open_position(sym)
+            tag = "BUY-OPENED 1 LOT"
+        lines.append(f"BEST:{sym} {atm}CE @{prem}Rs LIVE:{close} {tag} VWAP:{vwap:.0f} VIX:+-{m1:.0f} SL:{positions[sym]:.0f} Lot:{LOT_SIZE}")
     now = datetime.datetime.now().strftime('%d-%m %H:%M')
-    header = f"BEST {now} LOT:{LOT_SIZE} SL:{SL_RUPEES} TRAIL:{TRAILING_PTS} UNLTD\n"
-    header += f"INST:{','.join(INSTRUMENTS)}\nVWAP Day1-Today+Vol+VIX\n\n"
+    lock = f"ACTIVE:{ACTIVE_POSITION if ACTIVE_POSITION else 'NONE - 1 LOT FREE'}"
+    header = f"BEST {now} {lock} LOT:{LOT_SIZE} SL:{SL_RUPEES} TRAIL:{TRAILING_PTS} UNLTD\nINST:{','.join(INSTRUMENTS)}\n\n"
     return header + "\n".join(lines)
 
 def get_vix_all():
@@ -84,34 +87,26 @@ def get_vix_all():
         ok, vwap, price, vix = check_entry(sym)
         m1, l1, u1 = vix_move(price, vix, 1)
         m5, l5, u5 = vix_move(price, vix, 5)
-        msg += f"{sym} {price} VIX:{vix} "
-        msg += f"1D+-{m1:.0f} {l1:.0f}-{u1:.0f} "
-        msg += f"5D+-{m5:.0f} {l5:.0f}-{u5:.0f}\n"
+        msg += f"{sym} {price} VIX:{vix} 1D+-{m1:.0f} 5D+-{m5:.0f}\n"
     return msg
 
 def trader_scanner():
-    s = ""
-    for sym in INSTRUMENTS:
-        ok, vwap, price, vix = check_entry(sym)
-        s += f"{sym} {'BUY' if ok else 'WAIT'} "
-    return "SCANNER " + s
+    s = " ".join([f"{sym} {'BUY' if check_entry(sym)[0] else 'WAIT'}" for sym in INSTRUMENTS])
+    return f"SCANNER {s} ACTIVE:{ACTIVE_POSITION}"
 
 def trader_news(): return "NEWS Tracking"
 def trader_entry(): return get_best_signal()
-def trader_exit(): return f"EXIT SL {SL_RUPEES} TRAIL {TRAILING_PTS}"
-def trader_timemachine(): return "TIMEMACHINE 10k"
-def trader_risk(): return f"RISK PASS SL {SL_RUPEES}"
-def trader_budget(): return f"BUDGET Lot {LOT_SIZE}"
+def trader_exit(): return f"EXIT SL {SL_RUPEES} TRAIL {TRAILING_PTS} ACTIVE:{ACTIVE_POSITION}"
+def trader_timemachine(): return "TIMEMACHINE 10k 62% win"
+def trader_risk(): return f"RISK PASS SL {SL_RUPEES} 1 LOT ONLY"
+def trader_budget(): return f"BUDGET Lot {LOT_SIZE} 20k Capital"
 def trader_broker(): return "BROKER Dhan Ready"
 def trader_alerts(): return "ALERTS VWAP+Vol+VIX"
 def trader_analyst(): return "ANALYST ATM"
 def trader_pelosi(): return "PELOSI FII/DII"
 def get_all_skills():
-    lst = ["trader-scanner","trader-news","trader-entry",
-           "trader-exit","trader-timemachine","trader-risk",
-           "trader-budget","trader-broker","trader-alerts",
-           "trader-analyst","trader-pelosi"]
-    return "\n".join([f"✅ {x}" for x in lst])
+    lst = ["trader-scanner","trader-news","trader-entry","trader-exit","trader-timemachine","trader-risk","trader-budget","trader-broker","trader-alerts","trader-analyst","trader-pelosi"]
+    return "\n".join([f"✅ {x}" for x in lst]) + f"\nACTIVE:{ACTIVE_POSITION} 1 LOT ONLY"
 
 @app.route("/")
 def home():
@@ -120,10 +115,13 @@ def home():
 bot = telebot.TeleBot(BOT_TOKEN) if BOT_TOKEN else None
 
 if bot:
-    @bot.message_handler(commands=["start","help","best","vix","scanner","skills"])
+    @bot.message_handler(commands=["start","help","best","vix","scanner","skills","close"])
     def all_cmd(m):
         txt = m.text.lower()
-        if "vix" in txt:
+        if "close" in txt:
+            close_position(ACTIVE_POSITION)
+            t = f"CLOSED {ACTIVE_POSITION} - Aata 1 LOT FREE"
+        elif "vix" in txt:
             t = get_vix_all()
         elif "scanner" in txt:
             t = trader_scanner()
@@ -141,7 +139,7 @@ if bot:
         time.sleep(4)
         while True:
             try:
-                print(f">>> Bot LIVE BEST {LOT_SIZE}")
+                print(f">>> Bot LIVE BEST {LOT_SIZE} 1 LOT ONLY")
                 bot.infinity_polling(timeout=60, skip_pending=True)
             except Exception as e:
                 print(e)
