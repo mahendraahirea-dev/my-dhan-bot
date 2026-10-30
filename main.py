@@ -112,3 +112,25 @@ try:
     if __name__ == "__main__":
         app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
 except: pass
+# FINAL - NO 194 HARDCODING
+def get_best_strike(symbol, spot):
+    atm = round(spot / 50) * 50
+    candidates = [atm, atm+50, atm+100]  # Lowest ATM pasun
+    
+    best = None
+    lowest_premium = 999999
+    
+    for strike in candidates:
+        premium = get_ltp(symbol, strike)  # Real Dhan LTP
+        
+        # RATIO FILTER - Vevastit
+        if 20 < premium < 300:  # 300 chya aat, 20 chya var (junk nahi)
+            if premium < lowest_premium:  # Saglyat kamit
+                lowest_premium = premium
+                best = strike
+                
+    return best, lowest_premium  # Eg: NIFTY 24500 @ 187Rs (real time)
+
+# Usage:
+# best_strike, best_premium = get_best_strike("NIFTY", 24480)
+# ENTRY best_strike @ best_premium
