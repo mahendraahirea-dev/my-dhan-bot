@@ -160,3 +160,47 @@ VWAP Day1-Today + Volume
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT",10000)))
+    import os, threading, time, datetime, math
+from flask import Flask
+import telebot
+
+BOT_TOKEN = os.getenv("BOT_TOKEN") or os.getenv("TELEGRAM_TOKEN")
+LOT_SIZE = 65
+SL_RUPEES = 2000
+TRAILING_PTS = 25
+INSTRUMENTS = ["NIFTY","BANKNIFTY","SENSEX","NIFTY50","RELIANCE"]
+SKILLS = ["trader-scanner","trader-news","trader-entry","trader-exit","trader-timemachine","trader-risk","trader-budget","trader-broker","trader-alerts","trader-analyst","trader-pelosi"]
+
+app = Flask(__name__)
+positions = {}
+
+def calculate_vwap(candles):
+    tpv = sum(((c['high']+c['low']+c['close'])/3)*c['volume'] for c in candles)
+    tv = sum(c['volume'] for c in candles)
+    return tpv/tv if tv else 0
+
+def get_historical_data(symbol):
+    data = {
+        "NIFTY": [{"high":24650,"low":24400,"close":24580,"volume":1200000},{"high":24700,"low":24500,"close":24600,"volume":1500000}],
+        "BANKNIFTY": [{"high":52000,"low":51500,"close":51800,"volume":900000},{"high":52200,"low":51700,"close":52000,"volume":1100000}],
+        "SENSEX": [{"high":81000,"low":80500,"close":80800,"volume":800000},{"high":81200,"low":80700,"close":81000,"volume":1000000}],
+        "NIFTY50": [{"high":24650,"low":24400,"close":24580,"volume":1200000},{"high":24700,"low":24500,"close":24600,"volume":1500000}],
+        "RELIANCE": [{"high":2950,"low":2900,"close":2930,"volume":5000000},{"high":2970,"low":2920,"close":2950,"volume":6000000}],
+    }
+    return data.get(symbol, data["NIFTY"])
+
+def check_entry_condition(symbol):
+    candles = get_historical_data(symbol)
+    vwap = calculate_vwap(candles)
+    last = candles[-1]
+    avg_vol = sum(c['volume'] for c in candles)/len(candles)
+    ok = last['close'] > vwap and last['volume'] > avg_vol*1.5
+    return ok, vwap, last['close'], last['volume']
+
+def vix_expected_move(price, vix, days=1):
+    move = price * (vix/100) * math.sqrt(days) / math.sqrt(252)
+    return move, price-move, price+move
+
+def trader_vix_all():
+    live = {"NIFTY":(24600,14.5),"BANKNIFTY":(52000,15.2),"SENSEX":(81000,14.8),"NIFTY50":(24600,14.5),"RELIANCE":(2950,28.0)}
+    msg =
