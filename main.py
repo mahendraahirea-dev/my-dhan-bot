@@ -95,3 +95,42 @@ def main_loop():
 threading.Thread(target=main_loop, daemon=True).start()
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
+  # main.py - FINAL CODE
+
+LOT_SIZE = 65  # NIFTY 65 FINAL
+TRAIL_PTS = 25
+SL_PTS = 25
+QTY = 65
+MAX_PROFIT = 999999999  # UNLIMITED
+
+highest_price = 0
+entry_price = 0
+in_trade = False
+
+def on_price(current):
+    global highest_price
+    
+    if not in_trade:
+        return
+        
+    if current > highest_price:
+        highest_price = current
+        print(f"High: {highest_price}")
+
+    # 25pts Trail Lock - FINAL
+    if current <= highest_price - TRAIL_PTS:
+        profit = (current - entry_price) * QTY
+        print(f"✅ LOCK: {profit} Rs @ {current}")
+        exit_trade()
+        return
+
+    # SL 25pts
+    if current <= entry_price - SL_PTS:
+        print(f"❌ SL: {-SL_PTS*QTY} Rs")
+        exit_trade()
+
+def exit_trade():
+    global in_trade, highest_price
+    in_trade = False
+    highest_price = 0
+    # kite.exit() - tujha exit code ithe  
