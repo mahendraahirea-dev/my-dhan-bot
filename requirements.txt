@@ -3,6 +3,5 @@ uvicorn
 pyTelegramBotAPI
 requests
 python-dotenv
-dhan-ht
 pytz
 pyotp
