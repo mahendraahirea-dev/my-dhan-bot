@@ -2,7 +2,6 @@ import os
 import requests
 import telebot
 
-# --- ENV - donhi naav chaltil ---
 CLIENT_ID = os.getenv("CLIENT_ID") or os.getenv("CLIENTID") or ""
 ACCESS_TOKEN = os.getenv("ACCESS_TOKEN") or os.getenv("ACCESSTOKEN") or ""
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN") or os.getenv("BOT_TOKEN") or os.getenv("TELEGRAM_TOKEN") or ""
@@ -20,7 +19,6 @@ def get_all_ltp():
     try:
         payload = {"NSE_EQ": [13, 25, 2885, 27], "BSE_EQ": [51]}
         r = requests.post("https://api.dhan.co/v2/marketfeed/ltp", json=payload, headers=HEADERS, timeout=10)
-        print(f"[DHAN] {r.text[:600]}")
         data = r.json().get("data", {})
         nse = data.get("NSE_EQ", {}); bse = data.get("BSE_EQ", {})
         return {
@@ -34,61 +32,42 @@ def get_all_ltp():
         print(f"[ERR] {e}")
         return {}
 
-def claude_11_filters_with_your_rules(d):
-    nifty = d.get("NIFTY") or 0
-    bank = d.get("BANKNIFTY") or 0
-    vix = d.get("VIX") or 0
-    
-    # Tujhe rules
-    CAPITAL = 20000
-    SL_PER_TRADE = 2000
-    PREMIUM_MIN = 300
-    BOOK_TARGET = 1500
-    TRAIL_PTS = 35
-    HIGH_GAMMA_TIME = "9:45-11:30"
-
-    txt = f"""📊 LIVE:
-NIFTY: {d.get('NIFTY')} | BANK: {d.get('BANKNIFTY')}
-SENSEX: {d.get('SENSEX')} | RELI: {d.get('RELIANCE')} | VIX: {d.get('VIX')}
-
-💰 Tujha Setup: Cap {CAPITAL} | SL {SL_PER_TRADE} | Book {BOOK_TARGET}
-
-🧠 CLAUDE 11 FILTERS + TUJHE RULES:
-
-1.  Capital Filter: {CAPITAL} - 2k SL - Risk 10% OK
-2.  Premium Filter: 300 Khali No Trade (Theta Bachav)
-3.  High Gamma Filter: {HIGH_GAMMA_TIME} Madhech Trade - Gamma Blast
-4.  VIX Filter: {vix} - {'SAFE ( <16 )' if vix and vix<16 else 'NO TRADE ( >18 )'}
-5.  Nifty Trend: {nifty} - Above/Below 20EMA Check
-6.  Bank Confirm: {bank} - Bank + Nifty Doni Green Pahije
-7.  Sensex Align: Sensex Trend Follow
-8.  Reliance Lead: Reliance >1400 - Market Support
-9.  Entry: 300+ Premium Ghyaycha, 1500 Book Karaycha
-10. Trail Rule: {TRAIL_PTS} Pts Nantar SL to Cost + Trail 35-35
-11. No Trade Zone: 11:30 Nantar No High Gamma
-
-🎯 FINAL PLAN:
-- Entry Premium > {PREMIUM_MIN}
-- SL = {SL_PER_TRADE} (2k)
-- Target = {BOOK_TARGET} Book
-- 35 Pts Ale Ki SL Cost La + Trail Chalu
-- 1500 La 50% Book, Baki Trail
-"""
-    if vix and vix > 18:
-        txt += "\n🚫 FINAL: AAJ NO TRADE - VIX JAST"
-    elif vix and vix < 16 and nifty:
-        txt += "\n✅ FINAL: TRADE ALLOWED - HIGH GAMMA MODE ON"
-    else:
-        txt += "\n⚠️ FINAL: WAIT"
-    return txt
-
-@bot.message_handler(commands=['start','nifty','all','filters'])
+@bot.message_handler(commands=['start','nifty','all'])
 def start(m):
-    data = get_all_ltp()
-    if not data.get("NIFTY"):
-        bot.send_message(m.chat.id, f"Data Fail {data}")
+    d = get_all_ltp()
+    if not d.get("NIFTY"):
+        bot.send_message(m.chat.id, f"Spot Fail {d}")
         return
-    bot.send_message(m.chat.id, claude_11_filters_with_your_rules(data))
 
-print("Bot Started - 20k Cap 2k SL 300 Premium High Gamma 1500 Book 35 Trail")
+    CAPITAL=20000; SL=2000; TRAIL=35
+    vix = d.get("VIX") or 0
+
+    msg = f"""📊 LIVE - 5 INSTRUMENT
+
+NIFTY: {d.get('NIFTY')}
+BANKNIFTY: {d.get('BANKNIFTY')}
+SENSEX: {d.get('SENSEX')}
+RELIANCE: {d.get('RELIANCE')}
+VIX: {d.get('VIX')}
+
+💰 Cap {CAPITAL} | SL {SL} | Trail {TRAIL}
+
+🧠 CLAUDE 11 FILTERS + Tujhe Rules:
+1. Cap 20k / SL 2k - 10% Risk
+2. Premium 300 khali NO TRADE
+3. High Gamma 9:45-11:30 ONLY
+4. VIX {vix} - {'SAFE' if vix and vix<16 else 'RISKY >18 NO TRADE'}
+5. Nifty Trend + 20EMA
+6. Bank Confirm
+7. Sensex Align
+8. Reliance Lead >1400
+9. Entry >300 Premium / Book 1500
+10. 35pts Trail - Cost + Trail
+11. 11:30 Nantar No Trade
+
+{'✅ TRADE ALLOWED' if vix and vix<16 else '🚫 NO TRADE - VIX HIGH / WAIT'}
+"""
+    bot.send_message(m.chat.id, msg)
+
+print("Bot Started - FINAL NO DHANHQ - Requests Only")
 bot.infinity_polling()
