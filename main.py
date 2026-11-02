@@ -84,7 +84,7 @@ def get_fresh_token():
 
 def get_dhan():
     token = get_fresh_token()
-    return dhanhq(CLIENT_ID, token)
+return dhanhq(client_id=CLIENT_ID, access_token=token)    
 
 # ========== SPOT DATA NIFTY BANK SENSEX VIX ==========
 def get_all_spot():
