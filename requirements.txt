@@ -2,6 +2,6 @@ dhanhq
 pyotp
 fastapi
 uvicorn
-python-telegram-bot
 requests
 pandas
+python-telegram-bot
