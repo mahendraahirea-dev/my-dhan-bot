@@ -1,7 +1,2 @@
-dhanhq
-pyotp
-fastapi
-uvicorn
+pyTelegramBotAPI
 requests
-pandas
-python-telegram-bot
