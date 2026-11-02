@@ -1,12 +1,27 @@
 import os
 import time
+import threading
 import requests
 import telebot
 from datetime import datetime, time as dtime, timezone, timedelta
+from flask import Flask
+
+# ========= RENDER PORT FIX - NO MORE No open ports =========
+app = Flask(__name__)
+@app.route('/')
+def home():
+    return "Dhan Bot is Live - FINAL"
+
+def run_flask():
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host="0.0.0.0", port=port)
+
+threading.Thread(target=run_flask, daemon=True).start()
+# =============================================================
 
 CLIENT_ID = (os.getenv("CLIENT_ID") or os.getenv("CLIENTID") or "").strip()
 ACCESS_TOKEN = (os.getenv("ACCESS_TOKEN") or os.getenv("ACCESSTOKEN") or "").strip()
-BOT_TOKEN = (os.getenv("TELEGRAM_BOT_TOKEN") or os.getenv("BOT_TOKEN") or "").strip()
+BOT_TOKEN = (os.getenv("TELEGRAM_BOT_TOKEN") or os.getenv("BOT_TOKEN") or os.getenv("TELEGRAM_TOKEN") or "").strip()
 
 if not BOT_TOKEN:
     raise Exception("BOT_TOKEN missing in Render ENV")
@@ -15,15 +30,6 @@ bot = telebot.TeleBot(BOT_TOKEN, threaded=False)
 HEADERS = {"access-token": ACCESS_TOKEN,"client-id": CLIENT_ID,"Content-Type": "application/json"}
 
 IST = timezone(timedelta(hours=5, minutes=30))
-
-CAPITAL = 20000
-MAX_SL_PER_DAY = 2000
-PREMIUM_MIN = 200
-PREMIUM_MAX = 300
-BOOK_TARGET = 1500
-TRAIL_POINTS = 35
-LOT_SIZE_NIFTY = 75
-LOT_SIZE_BANK = 30
 STATE_FILE = "/tmp/trade_state.txt"
 
 def get_state():
@@ -58,7 +64,7 @@ def get_ltp_all():
         return {"NIFTY": nse.get("13", {}).get("last_price"),"BANK": nse.get("25", {}).get("last_price"),"REL": nse.get("2885", {}).get("last_price"),"VIX": nse.get("27", {}).get("last_price"),"SENSEX": bse.get("51", {}).get("last_price")}
     except Exception as e:
         print(f"LTP Error: {e}")
-        return {"NIFTY": None, "BANK": None, "SENSEX": None, "RELIANCE": None, "VIX": None}
+        return {"NIFTY": None, "BANK": None, "SENSEX": None, "REL": None, "VIX": None}
 
 def get_atm_strike(price, step=50):
     if not price: return None
@@ -74,7 +80,7 @@ def check_filters(d):
     f["NIFTY"] = d.get("NIFTY") is not None
     f["BANK"] = d.get("BANK") is not None
     f["SENSEX"] = d.get("SENSEX") is not None
-    f["RELIANCE"] = d.get("RELIANCE") is not None
+    f["RELIANCE"] = d.get("REL") is not None
     f["ONE_ENTRY"] = not get_state()["done"]
     all_ok = all([f["TIME"], f["VIX"], f["NIFTY"], f["ONE_ENTRY"]])
     return f, all_ok
@@ -116,6 +122,12 @@ def handle_others(m):
 def handle_any(m):
     bot.send_message(m.chat.id, "/start /ce /pe /all /done")
 
-print("Bot Started - FINAL NO PYTZ")
-bot.remove_webhook(); time.sleep(1); bot.delete_webhook(); time.sleep(1)
+print("Bot Started - FINAL NO PYTZ - FIXED")
+try:
+    bot.remove_webhook()
+    time.sleep(1)
+    bot.delete_webhook(drop_pending_updates=True)
+    time.sleep(1)
+except: pass
+
 bot.infinity_polling(timeout=60, long_polling_timeout=60, skip_pending=True)
