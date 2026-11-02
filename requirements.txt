@@ -1,6 +1,6 @@
 Flask
-requests
 pyTelegramBotAPI
 yfinance
 pandas
 lxml
+requests
