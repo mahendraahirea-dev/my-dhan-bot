@@ -3,4 +3,5 @@ pyTelegramBotAPI
 yfinance
 pandas
 lxml
+pytz
 requests
