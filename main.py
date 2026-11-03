@@ -1,47 +1,43 @@
+import os
 import warnings
-warnings.filterwarnings("ignore", category=FutureWarning)
+import logging
+# === WARNING KILLER - HE SARVAT VAR ASLA PAHIJE ===
+os.environ['PYTHONWARNINGS'] = 'ignore'
+warnings.simplefilter("ignore")
+warnings.filterwarnings("ignore")
+# ==================================================
 
-# Bot line badal
-bot = telebot.TeleBot(BOT_TOKEN, parse_mode="HTML", threaded=False)
-
-# run_bot function full replace kar ya ne:
-def run_bot():
-    bot.remove_webhook()
-    time.sleep(2)
-    while True:
-        try:
-            log.info("Starting polling...")
-            bot.infinity_polling(skip_pending=True, timeout=60, long_polling_timeout=60, logger_level=logging.ERROR)
-        except Exception as e:
-            log.error(f"Polling crashed: {e} - retrying in 15s")
-            time.sleep(15)
-
-threading.Thread(target=run_bot, daemon=True, name="TeleBotThread").start()
-
-if __name__=="__main__":
-    port = int(os.environ.get("PORT",10000))
-    app.run(host="0.0.0.0", port=port, debug=False, use_reloader=False, threaded=True)
-import os, time, threading, logging, json
+import time
+import threading
+import json
 from datetime import datetime, time as dtime
 from flask import Flask
-import telebot, yfinance as yf, pandas as pd
+import telebot
+import yfinance as yf
+import pandas as pd
 import pytz
+
+# Pandas cha extra warning band
+pd.options.mode.chained_assignment = None
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 if not BOT_TOKEN:
     raise ValueError("BOT_TOKEN not set")
 
-bot = telebot.TeleBot(BOT_TOKEN, parse_mode="HTML")
+bot = telebot.TeleBot(BOT_TOKEN, parse_mode="HTML", threaded=False)
 app = Flask(__name__)
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("DhanFinal")
+# yfinance cha logger band
+logging.getLogger("yfinance").setLevel(logging.CRITICAL)
+logging.getLogger("peewee").setLevel(logging.CRITICAL)
 
 @app.route('/')
 def home():
     return "DHAN FINAL - 1LOT 1ENTRY 2K SL 1500 LOCK 25 TRAIL + VIX + 11 FILTERS LIVE"
 @app.route('/health')
 def health():
-    return {"status":"ok"}
+    return {"status":"ok","time":str(datetime.now())}
 
 SYMBOLS = {"NIFTY":"^NSEI","BANKNIFTY":"^NSEBANK","SENSEX":"^BSESN","VIX":"^INDIAVIX","FINNIFTY":"^CNXFIN"}
 CACHE = {}
@@ -301,13 +297,14 @@ def run_bot():
     time.sleep(3)
     while True:
         try:
-            bot.infinity_polling(skip_pending=True, timeout=90, long_polling_timeout=90)
+            log.info("Starting polling...")
+            bot.infinity_polling(skip_pending=True, timeout=90, long_polling_timeout=90, logger_level=logging.ERROR)
         except Exception as e:
-            log.error(e)
-            time.sleep(10)
+            log.error(f"Polling exception: {e}")
+            time.sleep(15)
 
-threading.Thread(target=run_bot, daemon=True).start()
+threading.Thread(target=run_bot, daemon=True, name="TeleBotThread").start()
 
 if __name__=="__main__":
     port = int(os.environ.get("PORT",10000))
-    app.run(host="0.0.0.0", port=port, debug=False, use_reloader=False)
+    app.run(host="0.0.0.0", port=port, debug=False, use_reloader=False, threaded=True)
