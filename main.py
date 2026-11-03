@@ -1,3 +1,26 @@
+import warnings
+warnings.filterwarnings("ignore", category=FutureWarning)
+
+# Bot line badal
+bot = telebot.TeleBot(BOT_TOKEN, parse_mode="HTML", threaded=False)
+
+# run_bot function full replace kar ya ne:
+def run_bot():
+    bot.remove_webhook()
+    time.sleep(2)
+    while True:
+        try:
+            log.info("Starting polling...")
+            bot.infinity_polling(skip_pending=True, timeout=60, long_polling_timeout=60, logger_level=logging.ERROR)
+        except Exception as e:
+            log.error(f"Polling crashed: {e} - retrying in 15s")
+            time.sleep(15)
+
+threading.Thread(target=run_bot, daemon=True, name="TeleBotThread").start()
+
+if __name__=="__main__":
+    port = int(os.environ.get("PORT",10000))
+    app.run(host="0.0.0.0", port=port, debug=False, use_reloader=False, threaded=True)
 import os, time, threading, logging, json
 from datetime import datetime, time as dtime
 from flask import Flask
