@@ -16,7 +16,6 @@ import pandas as pd
 import pytz
 
 pd.options.mode.chained_assignment = None
-
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 if not BOT_TOKEN:
     raise ValueError("BOT_TOKEN not set")
@@ -29,7 +28,7 @@ logging.getLogger("yfinance").setLevel(logging.CRITICAL)
 
 @app.route('/')
 def home():
-    return "DHAN FINAL - NIFTY65 BANK30 FIN60 SENSEX20 - 1LOT 2K SL 1500 LOCK 25 TRAIL 10 FILTERS LIVE"
+    return "DHAN FINAL AUTO - NIFTY65 BANK30 FIN60 SENSEX20 - 1LOT AUTO ENTRY ON"
 @app.route('/health')
 def health():
     return {"status":"ok","time":str(datetime.now())}
@@ -54,7 +53,9 @@ RULES = {
     "ATM_GAP_SENSEX": 100,
     "ATM_GAP_FINNIFTY": 50,
     "MARKET_START": dtime(9,15),
-    "MARKET_END": dtime(15,15)
+    "MARKET_END": dtime(15,15),
+    "AUTO_ENTRY": True,
+    "AUTO_INDEX": "NIFTY"
 }
 
 STATE_FILE = "/tmp/state.json"
@@ -163,7 +164,7 @@ def vix_signal(vix):
     return "EXTREME"
 
 def get_atm(index_name, price):
-    gap = RULES.get(f"ATM_GAP_{index_name}", 50)
+    gap = 50
     if index_name == "BANKNIFTY": gap = RULES["ATM_GAP_BANK"]
     if index_name == "SENSEX": gap = RULES["ATM_GAP_SENSEX"]
     if index_name == "NIFTY": gap = RULES["ATM_GAP_NIFTY"]
@@ -208,7 +209,8 @@ def filter_budget():
     return True, f"✅ BUDGET: 1 LOT Risk {RULES['MAX_SL_RS']} SL"
 
 def filter_risk():
-    if STATE["entry_done"]:
+    today = datetime.now(IST).strftime('%d-%m-%Y')
+    if STATE["entry_done"] and STATE["date"]==today:
         return False, f"❌ RISK: 1 Entry Done {STATE['date']} {STATE['symbol']} {STATE['strike']}{STATE['type']}"
     return True, f"✅ RISK: 1 Entry Allowed"
 
@@ -234,9 +236,6 @@ def run_all_10_filters():
             ok_all = False
     return ok_all, res
 
-def run_all_11_filters():
-    return run_all_10_filters()
-
 def format_main_status():
     n_p = get_price("NIFTY")
     b_p = get_price("BANKNIFTY")
@@ -248,18 +247,53 @@ def format_main_status():
     d_s = get_day_data("SENSEX")
     d_f = get_day_data("FINNIFTY")
     all_pass, filters = run_all_10_filters()
-    msg = f"<b>🔥 DHAN FINAL - OFFICIAL LOTS 2026</b>\n{datetime.now(IST).strftime('%d %b %H:%M:%S IST')}\n\n"
+    msg = f"<b>🔥 DHAN FINAL AUTO - OFFICIAL LOTS 2026</b>\n{datetime.now(IST).strftime('%d %b %H:%M:%S IST')}\n\n"
     msg += f"NIFTY: {n_p} ({d_n['pct']}%) ATM {get_atm('NIFTY', n_p)} Lot {RULES['LOT_SIZE_NIFTY']}\n"
     msg += f"BANKNIFTY: {b_p} ({d_b['pct']}%) ATM {get_atm('BANKNIFTY', b_p)} Lot {RULES['LOT_SIZE_BANK']}\n"
     msg += f"SENSEX: {s_p} ({d_s['pct']}%) ATM {get_atm('SENSEX', s_p)} Lot {RULES['LOT_SIZE_SENSEX']}\n"
     msg += f"FINNIFTY: {f_p} ({d_f['pct']}%) ATM {get_atm('FINNIFTY', f_p)} Lot {RULES['LOT_SIZE_FINNIFTY']}\n"
     msg += f"VIX: {v_det['current']} ({vix_signal(v_det['current'])})\n\n"
-    msg += f"RULES: 1 LOT | 1 ENTRY | {RULES['MAX_SL_RS']} SL | {RULES['PROFIT_LOCK_RS']} LOCK | {RULES['TRAILING_PTS']} TRAIL\n\n"
+    msg += f"RULES: 1 LOT | 1 ENTRY | {RULES['MAX_SL_RS']} SL | {RULES['PROFIT_LOCK_RS']} LOCK | {RULES['TRAILING_PTS']} TRAIL | AUTO:{'ON' if RULES['AUTO_ENTRY'] else 'OFF'}\n\n"
     msg += f"--- 10 FILTERS (PELOSI REMOVED) ---\n"
     for _, txt in filters:
         msg += f"{txt}\n"
-    msg += f"\nSTATUS: {'🟢 TRADE ALLOWED' if all_pass else '🔴 NO TRADE'}\nEntry: {STATE.get('entry_done')} {STATE.get('date')} {STATE.get('symbol')} {STATE.get('strike')}{STATE.get('type')}\n"
+    msg += f"\nSTATUS: {'🟢 TRADE ALLOWED - AUTO ENTRY SOON' if all_pass else '🔴 NO TRADE'}\nEntry: {STATE.get('entry_done')} {STATE.get('date')} {STATE.get('symbol')} {STATE.get('strike')}{STATE.get('type')}\n"
     return msg
+
+def do_auto_entry():
+    global STATE
+    try:
+        today = datetime.now(IST).strftime('%d-%m-%Y')
+        if STATE["entry_done"] and STATE["date"]==today:
+            return
+        all_pass, _ = run_all_10_filters()
+        if not all_pass:
+            return
+        d_n = get_day_data("NIFTY")
+        typ = "PE" if d_n['pct']<0 else "CE"
+        idx = RULES["AUTO_INDEX"]
+        price = get_price(idx)
+        atm = get_atm(idx, price)
+        STATE = {"date":today,"entry_done":True,"entry_price":150,"lock_active":False,"max_profit":0,"symbol":idx,"strike":str(atm),"type":typ,"index":idx}
+        save_state(STATE)
+        msg = f"🚀 <b>AUTO ENTRY EXECUTED</b>\nINDEX: {idx}\nSTRIKE: {atm} {typ}\nTREND: {d_n['pct']}% {'BEARISH->PE' if typ=='PE' else 'BULLISH->CE'}\nLIVE: {price}\nLot Size {RULES.get(f'LOT_SIZE_{idx}', 65)} | 1 LOT\nSL {RULES['MAX_SL_RS']} LOCK {RULES['PROFIT_LOCK_RS']} TRAIL {RULES['TRAILING_PTS']}"
+        for cid in list(CHAT_IDS):
+            try:
+                bot.send_message(cid, msg)
+            except:
+                pass
+        log.info(f"AUTO ENTRY {idx} {atm} {typ}")
+    except Exception as e:
+        log.error(f"Auto entry fail {e}")
+
+def auto_trader_loop():
+    while True:
+        try:
+            if RULES["AUTO_ENTRY"]:
+                do_auto_entry()
+        except Exception as e:
+            log.error(f"Auto loop {e}")
+        time.sleep(30)
 
 @bot.message_handler(commands=['start','help','status'])
 def h_start(m):
@@ -272,47 +306,26 @@ def h_v(m):
     det = get_vix_details()
     bot.send_message(m.chat.id, f"VIX Curr:{det['current']} Prev:{det['prev']} Change:{det['change']} High:{det['high']} Low:{det['low']} Avg5:{det['avg5']} Signal:{vix_signal(det['current'])}")
 
-@bot.message_handler(commands=['trade','force'])
+@bot.message_handler(commands=['trade','force','ce','pe'])
 def h_force(m):
     global STATE
     parts = m.text.split()
-    idx = "NIFTY"
-    if len(parts)>=2:
-        idx = parts[1].upper()
-    typ = "CE"
-    if "pe" in m.text.lower():
-        typ = "PE"
-    price = get_price(idx)
-    atm = get_atm(idx, price)
-    strike = parts[2] if len(parts)>=3 else str(atm)
-    STATE = {"date":datetime.now(IST).strftime('%d-%m-%Y'),"entry_done":True,"entry_price":150,"lock_active":False,"max_profit":0,"symbol":idx,"strike":strike,"type":typ,"index":idx}
-    save_state(STATE)
-    lot = RULES.get(f"LOT_SIZE_{idx}", 65)
-    msg = f"🚀 <b>FORCE ENTRY</b>\nINDEX: {idx}\nSTRIKE: {strike} {typ}\nPRICE: {price} ATM {atm}\nLot Size {lot} | 1 LOT\nSL {RULES['MAX_SL_RS']} LOCK {RULES['PROFIT_LOCK_RS']} TRAIL {RULES['TRAILING_PTS']} PTS"
-    bot.send_message(m.chat.id, msg)
-
-@bot.message_handler(commands=['ce','pe'])
-def h_entry(m):
-    global STATE
-    all_pass, _ = run_all_10_filters()
-    if not all_pass:
-        bot.send_message(m.chat.id, format_main_status())
-        return
+    idx = RULES["AUTO_INDEX"]
     txt = m.text.lower()
-    if "bank" in txt: idx = "BANKNIFTY"
-    elif "sensex" in txt or "sen" in txt: idx = "SENSEX"
-    elif "fin" in txt: idx = "FINNIFTY"
-    else: idx = "NIFTY"
+    if "bank" in txt: idx="BANKNIFTY"
+    elif "sensex" in txt or "sen" in txt: idx="SENSEX"
+    elif "fin" in txt: idx="FINNIFTY"
+    else: idx="NIFTY"
     typ = "PE" if "pe" in txt else "CE"
     price = get_price(idx)
     atm = get_atm(idx, price)
-    parts = m.text.split()
-    strike = str(atm)
-    for p in parts:
-        if p.isdigit(): strike = p; break
-    STATE = {"date":datetime.now(IST).strftime('%d-%m-%Y'),"entry_done":True,"entry_price":150,"lock_active":False,"max_profit":0,"symbol":idx,"strike":strike,"type":typ,"index":idx}
+    strike = parts[-1] if len(parts)>=2 and parts[-1].isdigit() else str(atm)
+    today = datetime.now(IST).strftime('%d-%m-%Y')
+    STATE = {"date":today,"entry_done":True,"entry_price":150,"lock_active":False,"max_profit":0,"symbol":idx,"strike":strike,"type":typ,"index":idx}
     save_state(STATE)
-    bot.send_message(m.chat.id, f"✅ ENTRY {idx} {strike} {typ} 1 LOT\nPrice {price} ATM {atm} Lot {RULES.get(f'LOT_SIZE_{idx}', 65)}\n{RULES['MAX_SL_RS']} SL | {RULES['PROFIT_LOCK_RS']} LOCK | {RULES['TRAILING_PTS']} TRAIL")
+    lot = RULES.get(f"LOT_SIZE_{idx}", 65)
+    msg = f"🚀 <b>{'AUTO' if '/trade' in txt else 'MANUAL'} ENTRY</b>\nINDEX: {idx}\nSTRIKE: {strike} {typ}\nPRICE: {price} ATM {atm}\nLot Size {lot} | 1 LOT\nSL {RULES['MAX_SL_RS']} LOCK {RULES['PROFIT_LOCK_RS']} TRAIL {RULES['TRAILING_PTS']}"
+    bot.send_message(m.chat.id, msg)
 
 @bot.message_handler(commands=['nifty','banknifty','sensex','finnifty'])
 def h_idx(m):
@@ -328,7 +341,7 @@ def h_reset(m):
     global STATE
     STATE = {"date":"","entry_done":False,"entry_price":0,"lock_active":False,"max_profit":0,"symbol":"","strike":"","type":"","index":""}
     save_state(STATE)
-    bot.send_message(m.chat.id, "✅ Reset Done")
+    bot.send_message(m.chat.id, "✅ Reset Done - Auto will trigger in 30 sec if TRADE ALLOWED")
 
 @bot.message_handler(func=lambda m: True)
 def h_any(m):
@@ -346,6 +359,7 @@ def run_bot():
             time.sleep(15)
 
 threading.Thread(target=run_bot, daemon=True, name="TeleBotThread").start()
+threading.Thread(target=auto_trader_loop, daemon=True, name="AutoTrader").start()
 
 if __name__=="__main__":
     port = int(os.environ.get("PORT",10000))
