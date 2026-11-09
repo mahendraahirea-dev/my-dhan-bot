@@ -1,11 +1,10 @@
 import os
 import warnings
 import logging
-# === WARNING KILLER - HE SARVAT VAR ASLA PAHIJE ===
+# === WARNING KILLER ===
 os.environ['PYTHONWARNINGS'] = 'ignore'
 warnings.simplefilter("ignore")
 warnings.filterwarnings("ignore")
-# ==================================================
 
 import time
 import threading
@@ -17,7 +16,6 @@ import yfinance as yf
 import pandas as pd
 import pytz
 
-# Pandas cha extra warning band
 pd.options.mode.chained_assignment = None
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
@@ -28,13 +26,11 @@ bot = telebot.TeleBot(BOT_TOKEN, parse_mode="HTML", threaded=False)
 app = Flask(__name__)
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("DhanFinal")
-# yfinance cha logger band
 logging.getLogger("yfinance").setLevel(logging.CRITICAL)
-logging.getLogger("peewee").setLevel(logging.CRITICAL)
 
 @app.route('/')
 def home():
-    return "DHAN FINAL - 1LOT 1ENTRY 2K SL 1500 LOCK 25 TRAIL + VIX + 11 FILTERS LIVE"
+    return "DHAN FINAL - 1LOT 1ENTRY 2K SL 1500 LOCK 25 TRAIL + 10 FILTERS (PELOSI REMOVED) LIVE"
 @app.route('/health')
 def health():
     return {"status":"ok","time":str(datetime.now())}
@@ -64,32 +60,28 @@ def load_state():
         if os.path.exists(STATE_FILE):
             with open(STATE_FILE,'r') as f:
                 return json.load(f)
-    except:
-        pass
+    except: pass
     return {"date":"","entry_done":False,"entry_price":0,"lock_active":False,"max_profit":0,"symbol":"","strike":"","type":""}
 
 def save_state(s):
     try:
         with open(STATE_FILE,'w') as f:
             json.dump(s,f)
-    except:
-        pass
+    except: pass
 
 def load_chats():
     try:
         if os.path.exists(CHAT_IDS_FILE):
             with open(CHAT_IDS_FILE,'r') as f:
                 return set(json.load(f))
-    except:
-        pass
+    except: pass
     return set()
 
 def save_chats(c):
     try:
         with open(CHAT_IDS_FILE,'w') as f:
             json.dump(list(c),f)
-    except:
-        pass
+    except: pass
 
 STATE = load_state()
 CHAT_IDS = load_chats()
@@ -157,18 +149,12 @@ def get_vix_details():
         return {"current":get_vix(),"high":0,"low":0,"prev":0,"change":0,"avg5":0}
 
 def vix_signal(vix):
-    if vix==0:
-        return "NA"
-    if vix<11:
-        return "VERY LOW"
-    if vix<13:
-        return "LOW"
-    if vix<15:
-        return "NORMAL"
-    if vix<17.5:
-        return "HIGH"
-    if vix<21:
-        return "VERY HIGH"
+    if vix==0: return "NA"
+    if vix<11: return "VERY LOW"
+    if vix<13: return "LOW"
+    if vix<15: return "NORMAL"
+    if vix<17.5: return "HIGH"
+    if vix<21: return "VERY HIGH"
     return "EXTREME"
 
 def filter_scanner():
@@ -199,7 +185,7 @@ def filter_exit():
 def filter_timemachine():
     try:
         v = get_vix_details()['current']
-        if 10 < v < 18:
+        if 10 < v < 20: # PELOSI kadlyamule range vadhavla 18 to 20
             return True, f"✅ TIMEMACHINE: Pass VIX {v}"
         return False, f"❌ TIMEMACHINE: Fail VIX {v}"
     except:
@@ -214,7 +200,7 @@ def filter_risk():
     return True, f"✅ RISK: 1 Entry Allowed"
 
 def filter_broker():
-    return True, "✅ BROKER: Dhan Ready"
+    return True, "✅ BROKER: Dhan Ready (Paper if FnO not active)"
 
 def filter_alerts():
     return True, "✅ ALERTS: Telegram Active"
@@ -224,14 +210,14 @@ def filter_analyst():
     bias = "BULLISH" if n['pct']>0 else "BEARISH"
     return True, f"✅ ANALYST: {bias} {n['pct']}%"
 
+# === PELOSI REMOVED - Function thevli pan nehmi True ===
 def filter_pelosi():
     v = get_vix()
-    if v<16:
-        return True, f"✅ PELOSI: Stable {v}"
-    return False, f"❌ PELOSI: Volatile {v}"
+    return True, f"✅ PELOSI: REMOVED Bypassed VIX {v}"
 
 def run_all_11_filters():
-    fl = [filter_scanner, filter_news, filter_entry, filter_exit, filter_timemachine, filter_budget, filter_risk, filter_broker, filter_alerts, filter_analyst, filter_pelosi]
+    # OLD NAME COMPATIBILITY - PAN ATAA FAKT 10 FILTERS
+    fl = [filter_scanner, filter_news, filter_entry, filter_exit, filter_timemachine, filter_budget, filter_risk, filter_broker, filter_alerts, filter_analyst]
     res = []
     ok_all = True
     for f in fl:
@@ -246,14 +232,15 @@ def format_main_status():
     vix_det = get_vix_details()
     d_n = get_day_data("NIFTY")
     all_pass, filters = run_all_11_filters()
-    msg = f"<b>🔥 DHAN FINAL BOT</b>\n{datetime.now(IST).strftime('%d %b %H:%M:%S IST')}\n\n"
+    msg = f"<b>🔥 DHAN FINAL BOT - 10 FILTERS</b>\n{datetime.now(IST).strftime('%d %b %H:%M:%S IST')}\n\n"
     msg += f"NIFTY: {p['NIFTY']} ({d_n['pct']}%) ATM {int(round(p['NIFTY']/50)*50)}\n"
     msg += f"BANK: {p['BANKNIFTY']} | VIX: {vix_det['current']} ({vix_signal(vix_det['current'])})\n"
-    msg += f"RULES: 1 LOT | 1 ENTRY | 2K SL | 1500 LOCK | 25 TRAIL\n\n"
-    msg += f"--- 11 FILTERS ---\n"
+    msg += f"RULES: 1 LOT | 1 ENTRY | 2K SL | 1500 LOCK | 25 TRAIL\n"
+    msg += f"PELOSI: ❌ REMOVED\n\n"
+    msg += f"--- 10 FILTERS ---\n"
     for _, txt in filters:
         msg += f"{txt}\n"
-    msg += f"\nSTATUS: {'🟢 READY' if all_pass else '🔴 NO TRADE'}\nEntry Done: {STATE.get('entry_done')} {STATE.get('date')}\n"
+    msg += f"\nSTATUS: {'🟢 TRADE ALLOWED' if all_pass else '🔴 NO TRADE'}\nEntry Done: {STATE.get('entry_done')} {STATE.get('date')}\n"
     return msg
 
 @bot.message_handler(commands=['start','help','status'])
@@ -266,6 +253,22 @@ def h_start(m):
 def h_v(m):
     det = get_vix_details()
     bot.send_message(m.chat.id, f"VIX Curr:{det['current']} Prev:{det['prev']} Change:{det['change']} High:{det['high']} Low:{det['low']} Avg5:{det['avg5']} Signal:{vix_signal(det['current'])}")
+
+@bot.message_handler(commands=['trade','force','force_entry'])
+def h_force(m):
+    global STATE
+    typ = "PE" if "pe" in m.text.lower() else "CE"
+    parts = m.text.split()
+    strike = parts[1] if len(parts)>1 else str(int(round(get_price("NIFTY")/50)*50))
+    STATE = {"date":datetime.now(IST).strftime('%d-%m-%Y'),"entry_done":True,"entry_price":150,"lock_active":False,"max_profit":0,"symbol":"NIFTY","strike":strike,"type":typ}
+    save_state(STATE)
+    # CHECK LOG - Tula samjel ki entry ka adli hoti
+    msg = f"🚀 <b>FORCE ENTRY DONE (PELOSI REMOVED)</b>\n\n"
+    msg += f"NIFTY {strike} {typ} 1 LOT\n"
+    msg += f"VIX {get_vix()} Bypassed\n"
+    msg += f"2K SL | 1500 LOCK | 25 TRAIL Active\n\n"
+    msg += f"<b>NOTE:</b> Dhan FnO activate nasla tari ha PAPER ENTRY ahe. Real Paisa lagla nahi. Pan yavarun kalel ki itkya divas Pelosi mule entry adli hoti. Aata paise lavayala ready!"
+    bot.send_message(m.chat.id, msg)
 
 @bot.message_handler(commands=['ce','pe'])
 def h_entry(m):
@@ -286,7 +289,7 @@ def h_reset(m):
     global STATE
     STATE = {"date":"","entry_done":False,"entry_price":0,"lock_active":False,"max_profit":0,"symbol":"","strike":"","type":""}
     save_state(STATE)
-    bot.send_message(m.chat.id, "✅ Reset Done")
+    bot.send_message(m.chat.id, "✅ Reset Done - Udya sathi ready")
 
 @bot.message_handler(func=lambda m: True)
 def h_any(m):
